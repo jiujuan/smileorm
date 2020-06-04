@@ -124,14 +124,25 @@ func (bld *Builder) Update(data interface{}) (int64, error) {
 	return 0, errors.New("update error")
 }
 
-func (bld *Builder) Delete() (int64, error) {
-	stringWhere, _ := bld.AndWhere()
+// Delete data
+// conn.Table(table_name).Delete("id", 1)
+// conn.Table(table_name).Delete([][]interface{{"id",1},{"name", "tom"}})
+func (bld *Builder) Delete(data interface{}) (int64, error) {
+	mapdata := parseSliceData(data)
+	if len(mapdata) > 0 {
+		var setstr strings.Builder
+		valSlice := make([]interface{}, 0)
+		for key, val := range mapdata {
+			setstr.WriteString(fmt.Sprintf(" %s AND", key))
+			valSlice = append(valSlice, val)
+		}
+		deleteSQL := fmt.Sprintf(getDeleteStr(), bld.table, " WHERE "+strings.TrimRight(setstr.String(), " AND"))
+		bld.infoSql = deleteSQL
 
-	deleteSQL := fmt.Sprintf(getDeleteStr(), bld.table, " WHERE "+stringWhere)
-	bld.infoSql = deleteSQL
-
-	result, err := bld.conn.DeleteRaw(deleteSQL)
-	return result, err
+		result, err := bld.conn.DeleteRaw(deleteSQL, valSlice...)
+		return result, err
+	}
+	return 0, errors.New("delete error")
 }
 
 func getOpSqlStr(optype string) string {
@@ -157,7 +168,7 @@ func getUpdateStr() string {
 
 func getDeleteStr() string {
 	//delete table where id=xx
-	return "DELETE %s %s"
+	return "DELETE FROM %s %s"
 }
 
 // parse where conditions
@@ -194,7 +205,6 @@ func (bld *Builder) parseWhere(sep string) (string, error) {
 	return strings.Join(sqlSlice, sep), nil
 }
 
-func (bld *Builder) parseWhereslice()
 func parseParamData(data interface{}) map[string]interface{} {
 	valOf := reflect.ValueOf(data)
 	tpeOf := reflect.TypeOf(data)
@@ -211,14 +221,49 @@ func parseParamData(data interface{}) map[string]interface{} {
 			// valueSlice = append(valueSlice, valOf.Field(i).Interface())
 			mapString[tpeOf.Field(i).Name] = valOf.Field(i).Interface()
 		}
-	case reflect.Slice:
-		num := val.Len()
-		for i := 0; i < num; i++ {
-			item := val.Index(i)
 
-		}
 	}
 	return mapString
+}
+
+func parseSliceData(data interface{}) map[string]interface{} {
+	val := reflect.Indirect(reflect.ValueOf(data))
+
+	lenval := val.Len()
+	strMap := make(map[string]interface{})
+	slice := make([]interface{}, lenval)
+	switch val.Kind() {
+	case reflect.Slice:
+		for i := 0; i < lenval; i++ {
+			// v := val.Index(i).Interface()
+			slice[i] = val.Index(i).Interface()
+		}
+	}
+
+	if len(slice) > 0 {
+		reVal := reflect.Indirect(reflect.ValueOf(slice[0]))
+
+		switch reVal.Kind() {
+		case reflect.String:
+			s := fmt.Sprintf("%s=?", slice[0])
+			strMap[s] = slice[1]
+		case reflect.Slice:
+			for _, v := range slice {
+				refv := reflect.ValueOf(v)
+				count := refv.Len()
+
+				if count == 2 {
+					s := fmt.Sprintf("%s = ?", refv.Index(0))
+					strMap[s] = fmt.Sprintf("%v", refv.Index(1))
+				} else if count == 3 {
+					s := fmt.Sprintf("%s %s ?", refv.Index(0), refv.Index(1))
+					strMap[s] = fmt.Sprintf("%v", refv.Index(2))
+				}
+			}
+		}
+	}
+
+	return strMap
 }
 
 func mapToSlice(data map[string]interface{}) (fields []string, values []interface{}) {

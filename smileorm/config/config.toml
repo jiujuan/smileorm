@@ -1,9 +1,0 @@
-[db]
-host = "127.0.0.1"
-port = 3306
-db = "ormdemo"
-password = "root"
-username = "root"
-protocol = "tcp"
-MaxOpenConns = 30
-MaxIdleConns = 30

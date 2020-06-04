@@ -12,8 +12,8 @@ func main() {
 	defer conn.Close()
 
 	// ======Delete=====
-
-	insID, err := conn.Table("user").Where("id", 7).Delete()
+	wher := [][]interface{}{{"id", 12}, {"username", "tom"}}
+	insID, err := conn.Table("user").Delete(wher)
 	fmt.Println(conn.Table("user").DebugSql())
 
 	if err != nil {
